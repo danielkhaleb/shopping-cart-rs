@@ -1,4 +1,4 @@
-import { createContext, ReactNode, useContext, useState } from 'react';
+import { createContext, ReactNode, useContext, useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
 import { api } from '../services/api';
 import { Product, Stock } from '../types';
@@ -23,20 +23,60 @@ const CartContext = createContext<CartContextData>({} as CartContextData);
 
 export function CartProvider({ children }: CartProviderProps): JSX.Element {
   const [cart, setCart] = useState<Product[]>(() => {
-    // const storagedCart = Buscar dados do localStorage
+    const storagedCart = localStorage.getItem('@RocketShoes:cart');
 
-    // if (storagedCart) {
-    //   return JSON.parse(storagedCart);
-    // }
+    if (storagedCart) {
+      return JSON.parse(storagedCart);
+    }
 
     return [];
   });
 
+  useEffect(() => {
+    localStorage.setItem('@RocketShoes:cart', JSON.stringify(cart))
+  }, [cart])
+
   const addProduct = async (productId: number) => {
     try {
-      // TODO
+      if (productId) {
+        const resultStock = await api.get<Stock>(`/stock/${productId}`);
+        if (resultStock && resultStock.data) {
+          const stockItem = resultStock.data;
+          let productOnStock = false;
+          let isNewProductOnCart = false;
+          cart.forEach(p => {
+            if (p.id === stockItem.id) {
+              if (p.amount <= stockItem.amount) {
+                productOnStock = true
+              }
+            } else {
+              isNewProductOnCart = true;
+            }
+          });
+          if (isNewProductOnCart) {
+            const resultProduct = await api.get<Product>(`/stock/${productId}`);
+            if (resultProduct && resultProduct.data) {
+              const newProduct = resultProduct.data;
+              setCart([...cart, newProduct]);
+              return;
+            }
+          }
+          if (productOnStock) {
+            const cartUpdated = cart.map(p => {
+              if (p.id === productId) {
+                p.amount++;
+              }
+              return p;
+            });
+            setCart([...cartUpdated]);
+          } else {
+            toast.error('Não a produto no stock!');
+          }
+        }
+        toast.error('Produto não encontrado!');
+      }
     } catch {
-      // TODO
+      toast.error('Algum erro inesperado aconteceu, por favor tente mais tarde');
     }
   };
 
